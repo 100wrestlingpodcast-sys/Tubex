@@ -5,20 +5,117 @@ import shutil
 import subprocess
 import json
 
-# Verificar disponibilidad de ffmpeg local (bin/ffmpeg) y global en el sistema
+# Directorios y rutas base
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 BIN_DIR = os.path.abspath("bin")
-LOCAL_FFMPEG_PATH = os.path.join(BIN_DIR, "ffmpeg")
+os.makedirs(BIN_DIR, exist_ok=True)
 
+def install_local_ffmpeg():
+    """Descarga e instala localmente FFmpeg para macOS Apple Silicon (arm64)."""
+    import urllib.request
+    import zipfile
+    
+    zip_path = os.path.join(BIN_DIR, "ffmpeg.zip")
+    ffmpeg_path = os.path.join(BIN_DIR, "ffmpeg")
+    
+    # URL estable notarizada oficial de Martin Riedl para Apple Silicon
+    url = "https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffmpeg.zip"
+    
+    req = urllib.request.Request(
+        url, 
+        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+            
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(BIN_DIR)
+            
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+            
+        if os.path.exists(ffmpeg_path):
+            os.chmod(ffmpeg_path, 0o755)
+            return True, "¡FFmpeg se ha instalado localmente con éxito! Calidad de descarga desbloqueada."
+        else:
+            return False, "Error: No se encontró el ejecutable ffmpeg tras la extracción."
+    except Exception as e:
+        return False, f"Error durante la descarga o extracción de FFmpeg: {str(e)}"
+
+def install_local_ytdlp():
+    """Descarga e instala localmente el ejecutable yt-dlp para macOS o Linux."""
+    import urllib.request
+    import platform
+    
+    ytdlp_path = os.path.join(BIN_DIR, "yt-dlp")
+    
+    # Detectar el sistema operativo para descargar la versión correcta
+    system = platform.system().lower()
+    if "darwin" in system:
+        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+    else:
+        # Fallback a Linux binary (Streamlit Cloud, Hugging Face, Render son Linux)
+        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+    
+    req = urllib.request.Request(
+        url, 
+        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response, open(ytdlp_path, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+            
+        if os.path.exists(ytdlp_path):
+            os.chmod(ytdlp_path, 0o755)
+            return True, "¡yt-dlp se ha instalado localmente con éxito! Motor de descarga desbloqueado."
+        else:
+            return False, "Error: No se encontró el ejecutable yt-dlp tras la descarga."
+    except Exception as e:
+        return False, f"Error durante la descarga de yt-dlp: {str(e)}"
+
+# 1. Validar y purgar binario de arquitectura cruzada (Mac vs Linux en la nube)
+import platform
+system = platform.system().lower()
+ytdlp_file = os.path.join(BIN_DIR, "yt-dlp")
+if os.path.exists(ytdlp_file):
+    try:
+        with open(ytdlp_file, "rb") as f:
+            header = f.read(4)
+        is_elf = header.startswith(b"\x7fELF")
+        is_macho = header.startswith(b"\xcf\xfa\xed\xfe") or header.startswith(b"\xfe\xed\xfa\xcf")
+        
+        # Si estamos en Linux (Streamlit Cloud) y el binario es macOS Mach-O, eliminarlo para forzar reinstalación
+        if "linux" in system and is_macho:
+            os.remove(ytdlp_file)
+        # Si estamos en Mac y el binario es Linux ELF, eliminarlo para forzar reinstalación
+        elif "darwin" in system and is_elf:
+            os.remove(ytdlp_file)
+    except Exception as e:
+        pass
+
+# 2. Verificar disponibilidad de ffmpeg local y global
+LOCAL_FFMPEG_PATH = os.path.join(BIN_DIR, "ffmpeg")
 FFMPEG_GLOBAL = shutil.which("ffmpeg")
 FFMPEG_LOCAL_EXISTS = os.path.exists(LOCAL_FFMPEG_PATH) and os.access(LOCAL_FFMPEG_PATH, os.X_OK)
-
 FFMPEG_AVAILABLE = (FFMPEG_GLOBAL is not None) or FFMPEG_LOCAL_EXISTS
 FFMPEG_PATH = FFMPEG_GLOBAL if FFMPEG_GLOBAL is not None else (LOCAL_FFMPEG_PATH if FFMPEG_LOCAL_EXISTS else None)
 
-# Verificar disponibilidad de yt-dlp local (bin/yt-dlp) y global en el sistema
+# 3. Verificar disponibilidad de yt-dlp local y global
 LOCAL_YT_DLP_PATH = os.path.join(BIN_DIR, "yt-dlp")
 YT_DLP_GLOBAL = shutil.which("yt-dlp")
 YT_DLP_LOCAL_EXISTS = os.path.exists(LOCAL_YT_DLP_PATH) and os.access(LOCAL_YT_DLP_PATH, os.X_OK)
+
+# Auto-descarga silenciosa de yt-dlp si no existe local ni globalmente
+if not YT_DLP_GLOBAL and not YT_DLP_LOCAL_EXISTS:
+    try:
+        install_local_ytdlp()
+        YT_DLP_LOCAL_EXISTS = os.path.exists(LOCAL_YT_DLP_PATH) and os.access(LOCAL_YT_DLP_PATH, os.X_OK)
+    except Exception as e:
+        pass
 
 YT_DLP_AVAILABLE = (YT_DLP_GLOBAL is not None) or YT_DLP_LOCAL_EXISTS
 YT_DLP_PATH = YT_DLP_GLOBAL if YT_DLP_GLOBAL is not None else (LOCAL_YT_DLP_PATH if YT_DLP_LOCAL_EXISTS else None)
@@ -444,75 +541,7 @@ def reset_state():
     if "downloaded_file" in st.session_state:
         del st.session_state["downloaded_file"]
 
-def install_local_ffmpeg():
-    """Descarga e instala localmente FFmpeg para macOS Apple Silicon (arm64)."""
-    import urllib.request
-    import zipfile
-    
-    bin_dir = os.path.abspath("bin")
-    os.makedirs(bin_dir, exist_ok=True)
-    zip_path = os.path.join(bin_dir, "ffmpeg.zip")
-    ffmpeg_path = os.path.join(bin_dir, "ffmpeg")
-    
-    # URL estable notarizada oficial de Martin Riedl para Apple Silicon
-    url = "https://ffmpeg.martin-riedl.de/download/macos/arm64/1778761665_8.1.1/ffmpeg.zip"
-    
-    req = urllib.request.Request(
-        url, 
-        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    )
-    
-    try:
-        with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
-            shutil.copyfileobj(response, out_file)
-            
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(bin_dir)
-            
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-            
-        if os.path.exists(ffmpeg_path):
-            os.chmod(ffmpeg_path, 0o755)
-            return True, "¡FFmpeg se ha instalado localmente con éxito! Calidad de descarga desbloqueada."
-        else:
-            return False, "Error: No se encontró el ejecutable ffmpeg tras la extracción."
-    except Exception as e:
-        return False, f"Error durante la descarga o extracción de FFmpeg: {str(e)}"
-
-def install_local_ytdlp():
-    """Descarga e instala localmente el ejecutable yt-dlp para macOS o Linux."""
-    import urllib.request
-    import platform
-    
-    bin_dir = os.path.abspath("bin")
-    os.makedirs(bin_dir, exist_ok=True)
-    ytdlp_path = os.path.join(bin_dir, "yt-dlp")
-    
-    # Detectar el sistema operativo para descargar la versión correcta
-    system = platform.system().lower()
-    if "darwin" in system:
-        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
-    else:
-        # Fallback a Linux binary (Streamlit Cloud, Hugging Face, Render son Linux)
-        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
-    
-    req = urllib.request.Request(
-        url, 
-        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    )
-    
-    try:
-        with urllib.request.urlopen(req) as response, open(ytdlp_path, 'wb') as out_file:
-            shutil.copyfileobj(response, out_file)
-            
-        if os.path.exists(ytdlp_path):
-            os.chmod(ytdlp_path, 0o755)
-            return True, "¡yt-dlp se ha instalado localmente con éxito! Motor de descarga desbloqueado."
-        else:
-            return False, "Error: No se encontró el ejecutable yt-dlp tras la descarga."
-    except Exception as e:
-        return False, f"Error durante la descarga de yt-dlp: {str(e)}"
+# Las funciones de instalación install_local_ffmpeg e install_local_ytdlp se han movido a la cabecera para inicialización en el arranque
 
 # Inicializar estados de sesión para retener la descarga dinámica
 if "downloaded_file" not in st.session_state:
