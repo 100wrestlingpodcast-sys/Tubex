@@ -605,11 +605,12 @@ with st.container():
         if not YT_DLP_PATH:
             raise Exception("No se encontró el motor yt-dlp ejecutable. Por favor, instálalo usando el botón de la interfaz.")
 
-        # 1. Obtener metadatos en formato JSON
+        # 1. Obtener metadatos en formato JSON (pasando extractor-args para evadir 403 Forbidden)
         info_cmd = [
             YT_DLP_PATH,
             "-J",
             "--no-playlist",
+            "--extractor-args", "youtube:player_client=default,android;formats=missing_pot",
             url
         ]
         
@@ -640,10 +641,11 @@ with st.container():
         seconds = duration_sec % 60
         duration_str = f"{minutes}:{seconds:02d}"
         
-        # 2. Configurar argumentos de descarga
+        # 2. Configurar argumentos de descarga (pasando extractor-args para evadir 403 Forbidden)
         download_cmd = [
             YT_DLP_PATH,
             "--no-playlist",
+            "--extractor-args", "youtube:player_client=default,android;formats=missing_pot",
             url
         ]
         
