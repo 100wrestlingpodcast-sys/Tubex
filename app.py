@@ -605,14 +605,21 @@ with st.container():
         if not YT_DLP_PATH:
             raise Exception("No se encontró el motor yt-dlp ejecutable. Por favor, instálalo usando el botón de la interfaz.")
 
+        # Detección de cookies.txt para evadir bloqueos 403 en centros de datos
+        COOKIES_FILE = "cookies.txt"
+        COOKIES_PATH = os.path.join(os.path.abspath("."), COOKIES_FILE)
+        COOKIES_PRESENT = os.path.exists(COOKIES_PATH)
+
         # 1. Obtener metadatos en formato JSON (excluyendo android/ios para evitar 403 Forbidden y SABR en la nube)
         info_cmd = [
             YT_DLP_PATH,
             "-J",
             "--no-playlist",
             "--extractor-args", "youtube:player_client=default,-android,-ios",
-            url
         ]
+        if COOKIES_PRESENT:
+            info_cmd += ["--cookies", COOKIES_PATH]
+        info_cmd += [url]
         
         info_result = subprocess.run(info_cmd, capture_output=True, text=True)
         if info_result.returncode != 0:
@@ -646,8 +653,10 @@ with st.container():
             YT_DLP_PATH,
             "--no-playlist",
             "--extractor-args", "youtube:player_client=default,-android,-ios",
-            url
         ]
+        if COOKIES_PRESENT:
+            download_cmd += ["--cookies", COOKIES_PATH]
+        download_cmd += [url]
         
         # Directorio de descargas temporales
         base_outtmpl = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
